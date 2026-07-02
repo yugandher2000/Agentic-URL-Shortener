@@ -1,0 +1,328 @@
+// ── Variables ─────────────────────────────────────────────────────────────
+$bg:       #1a1a2e;
+$surface:  #21213a;
+$raised:   #272740;
+$shadow-d: #12121f;
+$shadow-l: #2e2e50;
+$accent:   #7c6af7;
+$accent-h: #9580ff;
+$text:     #cdd6f4;
+$muted:    #6c7086;
+$error:    #f38ba8;
+
+// ── Page ──────────────────────────────────────────────────────────────────
+.page {
+  min-height: 100vh;
+  background: $bg;
+  padding: 3rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+// ── Brand ─────────────────────────────────────────────────────────────────
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: $accent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(124, 106, 247, 0.45);
+}
+
+.brand-name {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: $text;
+  letter-spacing: -0.5px;
+}
+
+.brand-tagline {
+  color: $muted;
+  font-size: 0.95rem;
+  margin: 0 0 2.5rem;
+  text-align: center;
+}
+
+// ── Input Card ────────────────────────────────────────────────────────────
+.card {
+  width: 100%;
+  max-width: 600px;
+  background: $surface;
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 8px 8px 20px $shadow-d, -4px -4px 12px $shadow-l;
+  margin-bottom: 1.5rem;
+}
+
+.input-label {
+  color: $muted;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 1rem;
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.globe-icon {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: $muted;
+  pointer-events: none;
+  display: flex;
+  z-index: 1;
+}
+
+.url-input {
+  width: 100%;
+  padding: 0.875rem 1rem 0.875rem 2.75rem;
+  border: none;
+  border-radius: 12px;
+  background: $raised;
+  color: $text;
+  font-size: 0.95rem;
+  box-shadow: inset 4px 4px 8px $shadow-d, inset -2px -2px 6px $shadow-l;
+  outline: none;
+  transition: box-shadow 0.2s;
+
+  &::placeholder {
+    color: $muted;
+  }
+
+  &:focus {
+    box-shadow: inset 4px 4px 8px $shadow-d, inset -2px -2px 6px $shadow-l, 0 0 0 2px $accent;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.btn-shorten {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, $accent, $accent-h);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 20px rgba(124, 106, 247, 0.4);
+  transition: opacity 0.2s, transform 0.1s;
+
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ── Error ─────────────────────────────────────────────────────────────────
+.error-msg {
+  color: $error;
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+  padding-left: 0.25rem;
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+.stats-row {
+  width: 100%;
+  max-width: 600px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: $surface;
+  border-radius: 16px;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 6px 6px 16px $shadow-d, -3px -3px 10px $shadow-l;
+}
+
+.stat-icon-wrap {
+  color: $accent;
+  margin-bottom: 0.15rem;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: $text;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: $muted;
+}
+
+// ── Recent Links ──────────────────────────────────────────────────────────
+.recent-section {
+  width: 100%;
+  max-width: 600px;
+}
+
+.recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.recent-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: $text;
+}
+
+.recent-count {
+  font-size: 0.8rem;
+  color: $muted;
+  background: $surface;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  box-shadow: 3px 3px 8px $shadow-d, -2px -2px 6px $shadow-l;
+}
+
+.link-row {
+  background: $surface;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 4px 4px 12px $shadow-d, -2px -2px 8px $shadow-l;
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 6px 6px 16px $shadow-d, -3px -3px 10px $shadow-l;
+  }
+
+  &:hover .link-actions {
+    opacity: 1;
+  }
+}
+
+.link-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.link-short {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: $accent;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.link-original {
+  display: block;
+  font-size: 0.78rem;
+  color: $muted;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.2rem;
+}
+
+.link-clicks {
+  font-size: 0.78rem;
+  color: $muted;
+  white-space: nowrap;
+}
+
+.link-actions {
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: $raised;
+  color: $muted;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 3px 3px 6px $shadow-d, -1px -1px 4px $shadow-l;
+  transition: color 0.2s, background 0.2s;
+
+  &:hover {
+    color: $text;
+    background: $accent;
+  }
+}
+
+.btn-delete {
+  &:hover {
+    background: $error;
+    color: #fff;
+  }
+}

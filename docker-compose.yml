@@ -1,0 +1,97 @@
+
+# Images are pulled from Docker Hub automatically by Docker Desktop.
+# Start everything with: docker compose up --build
+
+services:
+
+  # ── MySQL 8 ──────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: url_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: url_shortener
+    ports:
+      - "3307:3306"     # 3306 occupied by local MySQL Windows service
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Redis Master  (ALL WRITES go here) ───────────────────────────────────────
+  redis-master:
+    image: redis:7-alpine
+    container_name: url_redis_master
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --save 60 1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Redis Replica  (ALL READS come from here) ─────────────────────────────────
+  redis-replica:
+    image: redis:7-alpine
+    container_name: url_redis_replica
+    restart: unless-stopped
+    ports:
+      - "6380:6379"          # host:6380 → container:6379
+    command: redis-server --replicaof redis-master 6379
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  # ── Spring Boot App ───────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: url_app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    environment:
+      # Override datasource to use Docker service names
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/url_shortener?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      # Redis master (writes)
+      SPRING_DATA_REDIS_HOST: redis-master
+      SPRING_DATA_REDIS_PORT: 6379
+      # Redis replica (reads) — internal Docker port is always 6379
+      APP_REDIS_REPLICA_HOST: redis-replica
+      APP_REDIS_REPLICA_PORT: 6379
+      # Short URL base
+      URL_BASE_URL: http://localhost:8080
+
+  # ── Angular Frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontEnd
+      dockerfile: Dockerfile
+    container_name: url_frontend
+    restart: unless-stopped
+    ports:
+      - "4200:80"           # Angular UI → http://localhost:4200
+    depends_on:
+      - app
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  mysql_data:

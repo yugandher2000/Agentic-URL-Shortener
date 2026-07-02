@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: urlShortener
+
+  # ── MySQL ───────────────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:mysql://localhost:3306/url_shortener?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update          # agents can evolve the schema; switch to validate in prod
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 60000ms
+
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Actuator (used by Testing Agent health-check) ───────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+# ── App-specific config ──────────────────────────────────────────────────────
+url:
+  base-url: http://localhost:8080
+  code-length: 6
+  cache-ttl-seconds: 3600
+
+# ── Redis replica (for direct read routing) ──────────────────────────────────
+app:
+  redis:
+    replica:
+      host: localhost
+      port: 6380   # local Docker port-mapping for the replica container
