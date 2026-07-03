@@ -14,7 +14,7 @@ import json
 from typing import Literal
 from pydantic import BaseModel, Field
 
-from agents.base_agent import make_llm, timed_stage
+from agents.base_agent import make_llm, timed_stage, invoke_structured
 from orchestrator.state import SDLCState
 from tools.audit_logger import make_audit_entry
 from tools.file_tools import read_project_file
@@ -56,7 +56,7 @@ Return a JSON object matching the SecurityOutput schema.
 
 def security_agent_node(state: SDLCState) -> dict:
     llm = make_llm()
-    structured = llm.with_structured_output(SecurityOutput)
+    structured = None  # unused — replaced by invoke_structured
 
     # Gather generated source files for review
     code_snippets: list[str] = []
@@ -71,11 +71,9 @@ def security_agent_node(state: SDLCState) -> dict:
     code_block = "\n\n".join(code_snippets) if code_snippets else "[no Java files found]"
 
     with timed_stage("security_scan") as timing:
-        result: SecurityOutput = structured.invoke(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Source files to review:\n\n{code_block}"},
-            ]
+        result: SecurityOutput = invoke_structured(
+            llm, SecurityOutput, _SYSTEM_PROMPT,
+            f"Source files to review:\n\n{code_block}",
         )
 
     report = result.model_dump()

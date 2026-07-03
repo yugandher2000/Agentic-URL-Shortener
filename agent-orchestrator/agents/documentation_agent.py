@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pydantic import BaseModel
 
-from agents.base_agent import make_llm, timed_stage
+from agents.base_agent import make_llm, timed_stage, invoke_structured
 from orchestrator.state import SDLCState
 from tools.audit_logger import make_audit_entry
 import config
@@ -46,7 +46,7 @@ Be concise but complete.  Return a JSON object matching DocsOutput.
 
 def documentation_agent_node(state: SDLCState) -> dict:
     llm = make_llm(temperature=0.2)
-    structured = llm.with_structured_output(DocsOutput)
+    structured = None  # unused — replaced by invoke_structured
 
     context = {
         "parsed_requirements": state.get("parsed_requirements"),
@@ -56,11 +56,9 @@ def documentation_agent_node(state: SDLCState) -> dict:
     }
 
     with timed_stage("generate_docs") as timing:
-        result: DocsOutput = structured.invoke(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Context:\n{json.dumps(context, indent=2)}"},
-            ]
+        result: DocsOutput = invoke_structured(
+            llm, DocsOutput, _SYSTEM_PROMPT,
+            f"Context:\n{json.dumps(context, indent=2)}",
         )
 
     docs = result.model_dump()

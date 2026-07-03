@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pydantic import BaseModel
 
-from agents.base_agent import make_llm, timed_stage
+from agents.base_agent import make_llm, timed_stage, invoke_structured
 from orchestrator.state import SDLCState
 from tools.audit_logger import make_audit_entry
 import config
@@ -58,7 +58,7 @@ Return a JSON object matching ReleaseOutput schema.
 
 def release_agent_node(state: SDLCState) -> dict:
     llm = make_llm()
-    structured = llm.with_structured_output(ReleaseOutput)
+    structured = None  # unused — replaced by invoke_structured
 
     context = {
         "architecture":    state.get("architecture"),
@@ -70,11 +70,9 @@ def release_agent_node(state: SDLCState) -> dict:
     }
 
     with timed_stage("generate_release") as timing:
-        result: ReleaseOutput = structured.invoke(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Context:\n{json.dumps(context, indent=2)}"},
-            ]
+        result: ReleaseOutput = invoke_structured(
+            llm, ReleaseOutput, _SYSTEM_PROMPT,
+            f"Context:\n{json.dumps(context, indent=2)}",
         )
 
     artifacts = result.model_dump()

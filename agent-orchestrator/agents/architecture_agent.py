@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pydantic import BaseModel, Field
 
-from agents.base_agent import make_llm, timed_stage
+from agents.base_agent import make_llm, timed_stage, invoke_structured
 from orchestrator.state import SDLCState
 from tools.audit_logger import make_audit_entry
 import config
@@ -49,16 +49,12 @@ Return a JSON object matching the ArchitectureOutput schema exactly.
 
 def architecture_agent_node(state: SDLCState) -> dict:
     llm = make_llm()
-    structured = llm.with_structured_output(ArchitectureOutput)
-
     req_json = json.dumps(state["parsed_requirements"], indent=2)
 
     with timed_stage("design_architecture") as timing:
-        result: ArchitectureOutput = structured.invoke(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Parsed requirements:\n{req_json}"},
-            ]
+        result: ArchitectureOutput = invoke_structured(
+            llm, ArchitectureOutput, _SYSTEM_PROMPT,
+            f"Parsed requirements:\n{req_json}",
         )
 
     arch = result.model_dump()

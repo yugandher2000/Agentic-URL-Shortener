@@ -8,15 +8,21 @@ Every agent:
 """
 from __future__ import annotations
 
+import json
+import re
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Generator
+from typing import Generator, Type, TypeVar
 
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_groq import ChatGroq
+from pydantic import BaseModel
 
 import config
 from tools.audit_logger import make_audit_entry  # noqa: F401  (re-exported)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def make_llm(temperature: float = 0.0) -> ChatGroq:
@@ -30,6 +36,38 @@ def make_llm(temperature: float = 0.0) -> ChatGroq:
         temperature=temperature,
         api_key=config.GROQ_API_KEY,
     )
+
+
+def invoke_structured(
+    llm: ChatGroq,
+    schema: Type[T],
+    system_prompt: str,
+    user_content: str,
+) -> T:
+    """
+    Call the LLM and parse its response as a Pydantic model.
+    Embeds the JSON schema in the prompt so function-calling is not needed.
+    Works with any Groq model regardless of tool-call support.
+    """
+    schema_str = json.dumps(schema.model_json_schema(), indent=2)
+    augmented_system = (
+        f"{system_prompt}\n\n"
+        "=== OUTPUT FORMAT ===\n"
+        "Respond with ONLY a valid JSON object (no markdown, no explanation) "
+        "matching this JSON Schema exactly:\n"
+        f"{schema_str}"
+    )
+    response = llm.invoke([
+        SystemMessage(content=augmented_system),
+        HumanMessage(content=user_content),
+    ])
+    raw = response.content.strip()
+    # Strip optional markdown fences
+    raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\n?```$", "", raw.strip(), flags=re.MULTILINE)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    parsed = json.loads(match.group() if match else raw, strict=False)
+    return schema.model_validate(parsed)
 
 
 def now_iso() -> str:

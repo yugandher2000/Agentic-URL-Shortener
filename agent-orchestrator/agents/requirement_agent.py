@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from agents.base_agent import make_llm, now_iso, timed_stage
+from agents.base_agent import make_llm, now_iso, timed_stage, invoke_structured
 from orchestrator.state import SDLCState
 from tools.audit_logger import make_audit_entry
 
@@ -64,14 +64,11 @@ Return a JSON object matching the RequirementOutput schema exactly.
 
 def requirement_agent_node(state: SDLCState) -> dict:
     llm = make_llm()
-    structured = llm.with_structured_output(RequirementOutput)
 
     with timed_stage("parse_requirements") as timing:
-        result: RequirementOutput = structured.invoke(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user",   "content": f"Requirement:\n{state['requirement']}"},
-            ]
+        result: RequirementOutput = invoke_structured(
+            llm, RequirementOutput, _SYSTEM_PROMPT,
+            f"Requirement:\n{state['requirement']}",
         )
 
     parsed = result.model_dump()
