@@ -1,160 +1,96 @@
-package com.yugandher.urlShortener.service;
 
-import com.yugandher.urlShortener.config.AppProperties;
-import com.yugandher.urlShortener.exception.UrlNotFoundException;
 import com.yugandher.urlShortener.model.UrlMapping;
 import com.yugandher.urlShortener.repository.UrlMappingRepository;
-import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Base64Utils;
 
+import javax.crypto.MessageDigest;
+import javax.crypto.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
-import java.util.Optional;
+import java.security.MessageDigestSpi;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 
-/**
- * Core business logic for the URL shortener.
- *
- * Redis architecture:
- *   WRITE (cache population) → masterRedisTemplate (Redis Master)
- *   READ  (cache lookup)     → replicaRedisTemplate (Redis Replica)
- *
- * Short code algorithm:
- *   1. SHA-256 hash of the original URL
- *   2. Take 8 bytes → interpret as unsigned long
- *   3. Base62-encode to exactly 6 chars
- *   4. On collision: append an attempt counter and repeat (bounded)
- */
 @Service
-@Slf4j
+@RequiredArgsConstructor
 public class UrlShortenerService {
 
-    private static final String BASE62       = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    private static final String REDIS_PREFIX = "url:";
+    private final UrlMappingRepository urlMappingRepository;
+    private final StringRedisTemplate masterRedisTemplate;
+    private final StringRedisTemplate replicaRedisTemplate;
+    private final ApplicationProperties props;
 
-    private final UrlMappingRepository repository;
-    private final StringRedisTemplate   masterRedis;   // WRITES
-    private final StringRedisTemplate   replicaRedis;  // READS
-    private final AppProperties         props;
-
-    public UrlShortenerService(
-            UrlMappingRepository repository,
-            @Qualifier("masterRedisTemplate")  StringRedisTemplate masterRedis,
-            @Qualifier("replicaRedisTemplate") StringRedisTemplate replicaRedis,
-            AppProperties props) {
-        this.repository   = repository;
-        this.masterRedis  = masterRedis;
-        this.replicaRedis = replicaRedis;
-        this.props        = props;
-    }
-
-    // ── Shorten ───────────────────────────────────────────────────────────────
-
-    @Transactional
     public String shortenUrl(String originalUrl) {
-        // Idempotent: return existing short URL if already known
-        Optional<UrlMapping> existing = repository.findByOriginalUrl(originalUrl);
-        if (existing.isPresent()) {
-            writeToMaster(existing.get().getShortCode(), originalUrl);
-            return buildShortUrl(existing.get().getShortCode());
+        UrlMapping existingUrlMapping = urlMappingRepository.findByOriginalUrl(originalUrl);
+        if (existingUrlMapping != null) {
+            return props.getUrlBaseUrl() + existingUrlMapping.getShortCode();
         }
 
-        // Generate code with bounded collision resolution
-        String shortCode = generateCode(originalUrl, 0);
-        int attempt = 1;
-        while (repository.findByShortCode(shortCode).isPresent() && attempt <= 10) {
-            shortCode = generateCode(originalUrl, attempt++);
-        }
+        UrlMapping urlMapping = new UrlMapping();
+        urlMapping.setOriginalUrl(originalUrl);
+        urlMapping.setCreatedAt(LocalDateTime.now());
+        urlMapping.setClickCount(0L);
 
-        UrlMapping mapping = UrlMapping.builder()
-                .shortCode(shortCode)
-                .originalUrl(originalUrl)
-                .build();
-        repository.save(mapping);
+        String shortCode = generateShortCode(urlMapping);
+        urlMapping.setShortCode(shortCode);
 
-        // WRITE → master node
-        writeToMaster(shortCode, originalUrl);
+        urlMappingRepository.save(urlMapping);
+        masterRedisTemplate.opsForValue().set(getRedisKey(shortCode), originalUrl, props.getCacheTtlSeconds(), TimeUnit.SECONDS);
 
-        log.info("Shortened: {} → {}", originalUrl, shortCode);
-        return buildShortUrl(shortCode);
+        return props.getUrlBaseUrl() + shortCode;
     }
 
-    // ── Resolve ───────────────────────────────────────────────────────────────
-
-    @Transactional(readOnly = true)
     public String getOriginalUrl(String shortCode) {
-        // READ → replica node first
-        String cached = replicaRedis.opsForValue().get(REDIS_PREFIX + shortCode);
-        if (cached != null) {
-            log.debug("Cache hit (replica): {}", shortCode);
-            return cached;
+        String originalUrl = replicaRedisTemplate.opsForValue().get(getRedisKey(shortCode));
+        if (originalUrl != null) {
+            return originalUrl;
         }
 
-        // Cache miss → fallback to DB
-        UrlMapping mapping = repository.findByShortCode(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException(shortCode));
+        UrlMapping urlMapping = urlMappingRepository.findByShortCode(shortCode);
+        if (urlMapping == null) {
+            throw new UrlNotFoundException("URL not found");
+        }
 
-        // Repopulate master (replica will replicate)
-        writeToMaster(shortCode, mapping.getOriginalUrl());
-        return mapping.getOriginalUrl();
+        masterRedisTemplate.opsForValue().set(getRedisKey(shortCode), urlMapping.getOriginalUrl(), props.getCacheTtlSeconds(), TimeUnit.SECONDS);
+        return urlMapping.getOriginalUrl();
     }
 
-    // ── Analytics ─────────────────────────────────────────────────────────────
-
-    @Transactional
     public void recordClick(String shortCode) {
-        repository.incrementClickCount(shortCode);
+        urlMappingRepository.incrementClickCount(shortCode);
     }
 
-    @Transactional(readOnly = true)
     public UrlMapping getAnalytics(String shortCode) {
-        return repository.findByShortCode(shortCode)
-                .orElseThrow(() -> new UrlNotFoundException(shortCode));
+        return urlMappingRepository.findByShortCode(shortCode);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private String generateShortCode(UrlMapping urlMapping) {
+        long value = urlMapping.getId() != null ? urlMapping.getId() : System.currentTimeMillis();
+        value = value & Long.MAX_VALUE;
 
-    private void writeToMaster(String shortCode, String originalUrl) {
-        masterRedis.opsForValue().set(
-                REDIS_PREFIX + shortCode,
-                originalUrl,
-                Duration.ofSeconds(props.getCacheTtlSeconds())
-        );
-    }
+        String base62String = Base62.encode(value);
+        String shortCode = base62String.substring(0, props.getUrlCodeLength());
 
-    public String buildShortUrl(String shortCode) {
-        return props.getBaseUrl() + "/" + shortCode;
-    }
-
-    private String generateCode(String originalUrl, int attempt) {
-        try {
-            String input = attempt == 0 ? originalUrl : originalUrl + "_" + attempt;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-
-            long value = 0;
-            for (int i = 0; i < 8; i++) {
-                value = (value << 8) | (hash[i] & 0xFFL);
-            }
-            // Mask sign bit → always non-negative, no overflow risk
-            value = value & Long.MAX_VALUE;
-
-            return toBase62(value, props.getCodeLength());
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 unavailable", e);
+        if (urlMappingRepository.findByShortCode(shortCode) != null) {
+            shortCode = generateShortCodeWithSuffix(urlMapping, shortCode);
         }
+
+        return shortCode;
     }
 
-    private String toBase62(long value, int length) {
-        char[] buf = new char[length];
-        for (int i = length - 1; i >= 0; i--) {
-            buf[i] = BASE62.charAt((int) Math.floorMod(value, 62L));
-            value = Math.floorDiv(value, 62L);
+    private String generateShortCodeWithSuffix(UrlMapping urlMapping, String shortCode) {
+        int suffix = 1;
+        while (urlMappingRepository.findByShortCode(shortCode + suffix) != null) {
+            suffix++;
         }
-        return new String(buf);
+
+        return shortCode + suffix;
+    }
+
+    private String getRedisKey(String shortCode) {
+        return "url:" + shortCode;
     }
 }

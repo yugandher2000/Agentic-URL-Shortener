@@ -1,39 +1,38 @@
-package com.yugandher.urlShortener.model;
 
-import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Table;
+import javax.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-    name = "url_mappings",
-    indexes = {
-        @Index(name = "idx_short_code", columnList = "shortCode", unique = true)
-    }
-)
+@Table(name = "url_mappings", uniqueConstraints = {
+    @UniqueConstraint(columnNames = "short_code")
+})
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class UrlMapping {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 10)
     private String shortCode;
 
-    @Column(nullable = false, length = 2048)
     private String originalUrl;
 
-    @Column(nullable = false)
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
-    @Column(nullable = false)
-    @Builder.Default
     private Long clickCount = 0L;
 }
